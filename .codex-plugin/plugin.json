@@ -1,0 +1,32 @@
+{
+  "name": "sdlc",
+  "version": "0.1.0+codex.20260607-164848",
+  "description": "Hooks-first SDLC workflow runtime for AI-assisted software development.",
+  "author": {
+    "name": "zsp"
+  },
+  "license": "MIT",
+  "keywords": [
+    "sdlc",
+    "hooks",
+    "workflow",
+    "software-development"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/codex-hooks.json",
+  "interface": {
+    "displayName": "Software Dev Process",
+    "shortDescription": "Hooks-first SDLC workflow runtime",
+    "longDescription": "Enforces lightweight SDLC lifecycle gates through user-level hooks while business projects store only docs/_sdlc state and task artifacts.",
+    "developerName": "zsp",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use Software Dev Process to start a lightweight SDLC task.",
+      "Check the current SDLC lifecycle status."
+    ]
+  }
+}

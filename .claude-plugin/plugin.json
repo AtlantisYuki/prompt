@@ -1,0 +1,9 @@
+{
+  "name": "sdlc",
+  "description": "Hooks-first SDLC workflow runtime for AI-assisted software development.",
+  "version": "0.1.0",
+  "author": {
+    "name": "zsp"
+  },
+  "hooks": "./hooks/claude-hooks.json"
+}
