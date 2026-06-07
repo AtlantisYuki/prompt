@@ -1,0 +1,14 @@
+{
+  "name": "yuki",
+  "description": "yuki plugins.",
+  "owner": {
+    "name": "zsp"
+  },
+  "plugins": [
+    {
+      "name": "sdlc",
+      "source": "./",
+      "description": "Hooks-first SDLC workflow runtime for AI-assisted software development."
+    }
+  ]
+}

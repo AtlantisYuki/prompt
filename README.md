@@ -1,300 +1,125 @@
 # AI 辅助开发工作流
 
-基于 Claude Code 的软件开发生命周期（SDLC）管理工作流，提供从需求理解到测试交付的完整流程支持。
+这是一个 hooks-first 的 SDLC 流程运行时。目标是把少数硬约束交给用户级插件里的 hooks 执行，把具体业务项目过程记录留在业务项目自己的 `docs/_sdlc` 和 `docs/[task]` 中。
 
-## 工作流程
+## 安装模型
 
-### 标准流程（分阶段执行）
+推荐 **用户级安装 plugin/runtime，项目级保存状态**。
 
-```
-需求输入 → design-1 → design-2 → implement → test → 知识沉淀
-```
+- 用户级：把本仓库作为插件根安装，保存 `skills/`、平台专用 hook 配置和 `hooks/sdlc/` runtime。
+- 项目级：只生成 `docs/_sdlc/current.json`、`docs/_sdlc/hook-events.ndjson` 和任务目录。
+- 不建议每个项目复制一份 `hooks/sdlc/`，否则流程规则会在项目之间漂移。
 
-#### 阶段 1：需求理解与概要设计（sdlc-design-1）
+本仓库作为用户级插件时，结构同时兼容 Codex 和 Claude Code：
 
-**输入**：用户需求描述
-
-**流程**：
-1. 确认任务目录，记录系统名称到 `status.md`
-2. 生成结构化需求 `structured-request.json`
-3. 扫描代码库上下文 `context-scan.json`
-4. 使用 `sequential-thinking` 梳理问题和约束
-5. 使用 `brainstorming` 做方案发散与收敛
-6. 补充上下文疑问 `context-question-N.json`
-
-**输出**：
-- `001-概要设计.md` - 包含问题分析、方案选型、架构设计
-- `001-概要设计-待确认.md` - 待确认项（如有不明确的逻辑或方案选择）
-- `status.md` - 记录系统名称和任务状态
-
-#### 阶段 2：详细设计与施工规划（sdlc-design-2）
-
-**输入**：概要设计文档
-
-**前置校验**：检查是否存在 `001-概要设计-待确认.md`
-- 分阶段模式：如存在，暂停并要求用户处理待确认项
-- Solo 模式：AI 自动选择最优方案并说明理由
-
-**流程**：
-1. 判断任务规模（≤3天 或 >3天）
-2. 中长期任务做模块化规划
-3. 收集实现细节，定义接口契约
-4. 明确风险点和验证标准
-
-**输出**：
-- `002-详细设计.md` - 接口定义、数据结构、流程细节
-- `002-详细设计-待确认.md` - 待确认项（如有）
-- `003-施工文档.md` - 改动文件清单、实施步骤、注释要求
-
-#### 阶段 3：代码实现（sdlc-implement）
-
-**输入**：施工文档
-
-**前置校验**：检查是否存在 `002-详细设计-待确认.md`
-- 分阶段模式：如存在，暂停并要求用户处理待确认项
-- Solo 模式：AI 自动选择最优方案并说明理由
-
-**流程**（任务级进度管控）：
-1. 读取施工文档中的任务拆解清单
-2. 严格按照任务 ID 顺序，逐个任务执行：
-   - 每次只执行一个任务
-   - 严格按照该任务的文件清单编码
-   - 同步补齐中文注释
-3. 每完成一个任务后，立即执行：
-   - 在 `003-文件改动记录.md` 中记录本次改动（必须写明行号范围）
-   - 在 `003-施工文档.md` 中更新任务状态为"已完成"
-   - 更新 `operations-log.md` 追加实施记录
-   - 更新 `status.md` 整体进度
-4. 循环执行，直到所有任务完成
-
-**输出**：
-- 代码变更
-- `003-文件改动记录.md` - 记录每个任务的文件改动及行号
-- `operations-log.md` - 实施记录
-- `sql/*.sql` - 数据库脚本（如有）
-- 更新后的 `003-施工文档.md` - 任务进度实时更新
-
-#### 阶段 4：质量验证与测试（sdlc-test）
-
-**输入**：实现的代码
-
-**流程**：
-1. 生成测试用例（正常路径、边界、异常、权限）
-2. 执行测试并记录结果
-3. 自我审查代码质量
-4. 回写知识到系统知识库
-
-**输出**：
-- `004-测试用例.md` - 测试用例清单
-- `005-测试报告.md` - 测试结果和风险评估
-- `testing.md` + `verification.md` - 测试执行过程
-- `review-report.md` - 自我审查结论
-- 知识库更新：`core://systems/[系统名称]/...`
-
-### 全自动模式（sdlc-solo）
-
-适用于需求明确、边界清晰的任务。
-
-**特点**：
-- 可在任何阶段启动
-- 自动检测已完成阶段，从下一阶段开始执行
-- 自动串联所有剩余阶段直到测试完成
-- 预计工作量 > 3 天时强制警告用户
-
-**使用场景**：
-- ✅ 需求明确的独立功能
-- ✅ 预计 ≤ 3 天的短期任务
-- ✅ 不涉及复杂架构变更
-- ❌ 需要分阶段评审的复杂任务
-- ❌ 需求不明确需要探索的任务
-
-### 问题排查模式（sdlc-debug）
-
-用于复杂 Bug 或回归问题的排查与修复。
-
-**输出**：
-- `006-Debug排查记录.md` - 问题定位过程和解决方案
-- 更新 `operations-log.md` 和 `verification.md`
-
-## 目录结构
-
-```
-docs/[需求目录]/
-├── 001-概要设计.md          # 概要设计
-├── 001-概要设计-待确认.md    # 待确认项（如有）
-├── 002-详细设计.md          # 详细设计
-├── 002-详细设计-待确认.md    # 待确认项（如有）
-├── 003-施工文档.md          # 施工规划（含任务拆解和进度跟踪）
-├── 003-文件改动记录.md      # 文件改动记录（含行号）
-├── 004-测试用例.md          # 测试用例
-├── 005-测试报告.md          # 测试报告
-├── 006-Debug排查记录.md     # Debug 记录（如有）
-├── status.md                # 任务状态（含系统名称和整体进度）
-├── summary.md               # 阶段总结（可选）
-├── sql/                     # 数据库脚本
-└── onlyAI/                  # AI 工作区
-    ├── structured-request.json
-    ├── context-scan.json
-    ├── context-question-N.json
-    ├── operations-log.md
-    ├── testing.md
-    ├── verification.md
-    └── review-report.md
+```text
+.codex-plugin/plugin.json     # Codex 插件入口
+.claude-plugin/plugin.json    # Claude Code 插件入口
+skills/                       # 平台共享 skills
+hooks/codex-hooks.json        # Codex 插件 hook 入口
+hooks/claude-hooks.json       # Claude Code 插件 hook 入口
+hooks/sdlc/                   # SDLC runtime
 ```
 
-## 核心约束
+`.codex-plugin/plugin.json` 和 `.claude-plugin/plugin.json` 分别通过 `hooks` 字段指向自己的 hook 配置文件。两个 hook 配置都调用 `hooks/sdlc/bin/plugin-hook.mjs`，再由它分发到对应平台 adapter，业务项目不需要复制 runtime。Codex 安装后仍需要按插件 hook 信任流程启用；Claude Code 可用 `claude --plugin-dir <THIS_REPO>` 进行本地验证。
 
-1. **指令驱动与前置校验**：必须通过对应指令触发，严禁跳阶段
-2. **先读上下文再设计**：设计前先读取需求与上下文
-3. **强制逻辑推导**：概要设计必须使用 sequential-thinking 和 brainstorming
-4. **待确认机制**：设计阶段遇到不明确逻辑时生成待确认文档，进入下一阶段前强制校验
-5. **允许回退修正**：发现设计缺陷时可回退到 design-2 更新
-6. **控制改动边界**：只清理本次施工产生的脏代码，不越界重构
-7. **记忆回写必做**：任务完成后必须回写到 `core://systems/[系统名称]/...`
-
-## 知识管理
-
-### 系统名称标记
-
-在 `sdlc-design-1` 阶段首次创建 `status.md` 时，必须记录系统名称：
-
-```markdown
-系统：用户中心
-任务：实现用户登录功能
-状态：进行中
-```
-
-### 知识库路径
-
-任务完成后，知识回写到对应系统的知识库：
-
-```
-core://systems/用户中心/登录模块/...
-core://systems/订单中心/支付流程/...
-core://systems/商品中心/库存管理/...
-```
-
-这样可以确保知识按系统归类，便于后续查询和复用。
-
-## 待确认机制
-
-### 设计理念
-
-在设计阶段，AI 可能遇到无法明确的逻辑、需要权衡的技术方案、或存在风险的设计点。待确认机制确保这些关键决策点被明确记录和处理。
-
-### 何时生成待确认文档
-
-在 design-1 或 design-2 阶段，遇到以下情况时必须生成待确认文档：
-
-1. **技术方案选择**：存在多个可行方案，各有优劣
-2. **业务逻辑不明确**：需求描述模糊，存在多种理解方式
-3. **架构/性能风险**：设计存在已知风险，需要确认可接受程度
-4. **外部依赖**：涉及外部系统集成，接口规范待确认
-5. **数据结构设计**：数据库表结构存在多种设计方案
-6. **异常处理策略**：错误处理、降级策略需要明确
-
-### 待确认文档内容
-
-每个待确认项包含：
-- 问题描述
-- 候选方案（至少 2 个）
-- 每个方案的优缺点、风险评估、实现成本
-- AI 推荐方案（如有明确倾向）
-- 优先级标记（高/中/低）
-
-### 处理方式
-
-#### 分阶段模式
-1. AI 生成待确认文档（如 `001-概要设计-待确认.md`）
-2. 暂停当前阶段，提示用户处理
-3. 用户在文档中填写决策结果
-4. AI 读取决策，更新设计文档，重新收敛设计逻辑
-5. 将待确认文档状态标记为"已处理"
-6. **待确认文档保留作为决策记录，不删除**
-7. 完成当前阶段的后续步骤
-8. **只有待确认文档状态为"已处理"后，才能进入下一阶段**
-
-#### Solo 模式
-1. AI 生成待确认文档
-2. AI 立即在当前阶段内自动处理
-3. 评估各方案（性能、可维护性、实现成本、风险、扩展性）
-4. 选择综合评分最高的方案
-5. 在设计文档中补充"AI 自动决策"章节，说明选择理由
-6. 根据选定方案重新收敛设计逻辑，更新设计文档
-7. 将待确认文档状态标记为"已处理"
-8. **待确认文档保留作为决策记录，不删除**
-9. 继续当前阶段的后续步骤
-
-### 示例
-
-```markdown
-## 待确认项 1：用户会话存储方案
-
-### 问题描述
-用户登录后需要维护会话状态，存在多种技术方案。
-
-### 候选方案
-
-#### 方案 A：Redis 集中式存储
-**优点**：
-- 支持分布式部署
-- 性能好，支持过期自动清理
-
-**缺点**：
-- 增加 Redis 依赖
-- 需要维护 Redis 集群
-
-**实现成本**：中
-
-#### 方案 B：JWT Token
-**优点**：
-- 无状态，不需要服务端存储
-- 减少服务端压力
-
-**缺点**：
-- Token 无法主动失效
-- Token 体积较大
-
-**实现成本**：低
-
-### AI 推荐方案
-推荐方案 A（Redis），理由：
-- 系统已有 Redis 基础设施
-- 需要支持强制登出功能
-- 会话数据需要实时更新
-```
-
-## 使用方法
-
-### 分阶段执行
+手动或旧配置接入时，用户级 hook 命令仍可使用绝对 runtime 路径，例如：
 
 ```bash
-# 阶段 1：需求理解与概要设计
-/software-dev-process sdlc-design-1
-
-# 阶段 2：详细设计与施工规划
-/software-dev-process sdlc-design-2
-
-# 阶段 3：代码实现
-/software-dev-process sdlc-implement
-
-# 阶段 4：质量验证与测试
-/software-dev-process sdlc-test
-
-# 问题排查与修复
-/software-dev-process sdlc-debug
+node <SDLC_RUNTIME>/hooks/sdlc/bin/sdlc-hook.mjs status
+node <SDLC_RUNTIME>/hooks/sdlc/bin/sdlc-hook.mjs init --task-dir docs/login-fix --system 用户中心 --profile standard
 ```
 
-### 全自动模式
+`<SDLC_RUNTIME>` 是本仓库或你安装到用户目录的插件/runtime 路径。命令的工作目录应是当前业务项目根目录；也可以用 `SDLC_WORKSPACE` 显式指定项目根。
+
+平台接入示例：
+
+- Codex: `hooks/sdlc/manifests/codex.config.example.toml`
+- Claude Code: `hooks/sdlc/manifests/claude.settings.example.json`
+
+## 硬约束
+
+这些规则默认由 hooks 执行，不依赖 agent 自觉：
+
+- 未初始化生命周期时阻断源文件写入。
+- 设计阶段阻断源文件编辑。
+- 待确认文档未处理时阻断源文件编辑和阶段切换。
+- 实现阶段只允许修改 `onlyAI/task-plan.json` 或施工文档列出的路径，以及生命周期文档。
+
+查看当前状态：
 
 ```bash
-# 从头开始全自动执行
-/software-dev-process sdlc-solo
-
-# 在任意阶段启动，自动完成后续流程
-/software-dev-process sdlc-solo
+node <SDLC_RUNTIME>/hooks/sdlc/bin/sdlc-hook.mjs status
 ```
 
-## 许可证
+`status` 会返回：
 
-MIT License - 详见 [LICENSE](LICENSE) 文件
+- `nextAction`
+- `blockingReasons`
+- `requiredArtifacts`
+- `recommendedReads`
+- `allowedPaths`
+
+agent 应优先使用这些字段，避免反复检索历史文档。
+
+## 风险档位
+
+`profile` 控制必需产物，不改变硬约束。
+
+| 档位 | 适用场景 | 必需产物 |
+| --- | --- | --- |
+| `lite` | 0.5 天内、1-3 个文件、无 DB/权限/外部接口/架构风险 | `current.json`、`onlyAI/task-plan.json`、`onlyAI/verification.md` 或 `summary.md` |
+| `standard` | 一般功能、小型重构、影响面明确 | `001-概要设计.md`、`onlyAI/task-plan.json`、`003-文件改动记录.md`、`onlyAI/verification.md` |
+| `full` | 跨模块、数据模型、安全权限、外部依赖、高风险上线 | 完整设计、施工、测试、报告和自审文档 |
+
+初始化时选择：
+
+```bash
+node <SDLC_RUNTIME>/hooks/sdlc/bin/sdlc-hook.mjs init --task-dir docs/login-fix --system 用户中心 --profile lite
+```
+
+默认是 `standard`。
+
+## 机器可读施工边界
+
+优先使用 `docs/[task]/onlyAI/task-plan.json`：
+
+```json
+{
+  "allowedPaths": ["src/shared.ts"],
+  "tasks": [
+    {
+      "id": "T-01",
+      "status": "done",
+      "allowedPaths": ["src/login.ts"],
+      "verification": ["npm test"]
+    }
+  ]
+}
+```
+
+Markdown 施工文档仍兼容，但只作为回退。`task-plan.json` 是 hooks 判断允许路径和任务完成度的首选来源。
+
+## 待确认
+
+待确认只用于用户必须承担取舍的情况，例如业务语义、外部依赖、权限/安全风险、不可逆数据模型选择。
+
+不要因为“存在两个技术方案”就自动生成待确认；能从代码、配置、现有文档确认的，先查清楚。
+
+待确认处理标记：
+
+- `状态：已处理`
+- `决策状态：已决策`
+
+## 产物原则
+
+- 不为了填模板制造低价值文档。
+- 能从代码、目录、依赖、配置自然推断的内容不写。
+- `onlyAI/` 用于过程记录；面向用户的结论放在任务目录正式文档或 `summary.md`。
+- 施工记录默认写文件、意图、验证结果；只有 full 档或审计需要时再写行号范围。
+
+## 测试
+
+```bash
+node hooks/sdlc/tests/run-tests.mjs
+```

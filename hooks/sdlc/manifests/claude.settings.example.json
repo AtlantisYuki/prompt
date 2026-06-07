@@ -1,0 +1,48 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <SDLC_RUNTIME>/hooks/sdlc/bin/claude-hook.mjs SessionStart"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <SDLC_RUNTIME>/hooks/sdlc/bin/claude-hook.mjs PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <SDLC_RUNTIME>/hooks/sdlc/bin/claude-hook.mjs PostToolUse"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <SDLC_RUNTIME>/hooks/sdlc/bin/claude-hook.mjs Stop"
+          }
+        ]
+      }
+    ]
+  }
+}

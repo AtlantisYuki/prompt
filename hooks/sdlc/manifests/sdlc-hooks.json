@@ -1,0 +1,39 @@
+{
+  "name": "software-dev-process-sdlc-hooks",
+  "version": 1,
+  "events": [
+    {
+      "internal": "session.start",
+      "codex": "sessionStart",
+      "claudeCode": "SessionStart",
+      "blocking": false,
+      "purpose": "Inject a short SDLC lifecycle reminder and active task summary."
+    },
+    {
+      "internal": "tool.before",
+      "codex": "preToolUse",
+      "claudeCode": "PreToolUse",
+      "blocking": true,
+      "purpose": "Block source writes before lifecycle state, before design completion, or outside implementation scope."
+    },
+    {
+      "internal": "tool.after",
+      "codex": "postToolUse",
+      "claudeCode": "PostToolUse",
+      "blocking": false,
+      "purpose": "Record tool activity and update hook state."
+    },
+    {
+      "internal": "session.stop",
+      "codex": "stop",
+      "claudeCode": "Stop",
+      "blocking": "configurable",
+      "purpose": "Warn or block when the active phase is incomplete."
+    }
+  ],
+  "stateFiles": {
+    "current": "docs/_sdlc/current.json",
+    "events": "docs/_sdlc/hook-events.ndjson",
+    "taskState": "docs/[task-dir]/onlyAI/hook-state.json"
+  }
+}
