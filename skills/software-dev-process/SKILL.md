@@ -1,11 +1,11 @@
 ---
 name: software-dev-process
-description: 管理完整的软件开发生命周期（需求理解、概要设计、详细设计、施工实现、测试与排查）。用于通过 sdlc-design-1、sdlc-design-2、sdlc-implement、sdlc-test、sdlc-debug 分阶段驱动任务，或通过 sdlc-solo 全自动执行剩余流程。强制检查前置产物、模板输出和阶段边界。
+description: 管理完整的软件开发生命周期（需求理解、概要设计、详细设计、施工实现、测试与排查）。用于通过 sdlc-design-1、sdlc-design-2、sdlc-implement、sdlc-test、sdlc-debug 分阶段驱动任务，通过 sdlc-solo 全自动执行剩余流程，通过 sdlc-script 处理一次性脚本任务，或通过 sdlc-history / 询问某需求历史会话时查询 AI 登记库。强制检查前置产物、模板输出和阶段边界。
 ---
 
 # Software Development Process Skill
 
-当用户明确使用 `sdlc-design-1`、`sdlc-design-2`、`sdlc-implement`、`sdlc-test`、`sdlc-debug`、`sdlc-solo`，或要求按标准 SDLC 阶段推进任务时，使用本 Skill。
+当用户明确使用 `sdlc-design-1`、`sdlc-design-2`、`sdlc-implement`、`sdlc-test`、`sdlc-debug`、`sdlc-solo`、`sdlc-script`、`sdlc-history`，询问某需求的历史会话，或要求按标准 SDLC 阶段推进任务时，使用本 Skill。
 
 ## 核心约束
 
@@ -16,6 +16,8 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
 5. **允许回退修正**：若在施工或测试时发现前期设计存在重大缺陷，必须停止当前阶段，回退到 `sdlc-design-2` 更新设计文档。
 6. **控制改动边界**：代码实现时，只清理本次施工直接产生的脏代码；未获许可时，不得顺手大范围重构历史代码，也不得修改未在准入清单中的文件。
 7. **记忆回写必做**：任务完成后必须优先 `update_memory` 对应节点；若无对应节点，则先 `create_memory` 再回写结论，禁止跳过记忆更新直接结束任务。**记忆回写时，必须使用 `status.md` 中记录的系统名称作为知识库路径**（如：`core://systems/用户中心/...`）。
+8. **status.md 持续同步**：每个阶段开始、阶段完成、待确认文档生成或处理、每个施工任务完成、每次测试执行、发生阻塞或回退时，必须立即更新 `docs/[需求目录]/status.md`。该文件是人工进度说明与阶段推进的参考依据，禁止把状态更新集中拖到最终交付。
+9. **AI 登记必做**：执行 SDLC 时，必须维护 AI 登记库 `docs/ai-register.db`（SQLite）。会话启动时由 SessionStart hook 把本会话的 sessionId、工具、模型注入上下文（hook 本身不写库）；AI 必须以**自己被注入的 sessionId** 为键，调用本 skill `scripts/ai_register_core.py`：会话开始时 `upsert` 登记身份，在阶段切换、施工任务完成、测试执行等节点 `progress` 回填 `task_dir` / 完成功能 / 完成进度，与 `status.md` 更新同频。详见"AI 登记机制"章节。
 
 ## 目录与资源约定
 
@@ -24,6 +26,8 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
 - **onlyAI 工作区**：仅供 AI 读取和维护的过程文件统一输出到 `docs/[需求目录]/onlyAI/`，包括 `structured-request.json`、`context-scan.json`、`context-question-N.json`、`operations-log.md`、`testing.md`、`verification.md`、`review-report.md`。
 - **SQL 脚本**：数据库变更脚本统一输出到 `docs/[需求目录]/sql/`。
 - **摘要文档**：如有必要，可自主生成 `docs/[需求目录]/summary.md` 或 `docs/index.md` 汇总阶段结论与交付物索引。
+- **status.md 字段规范**：`status.md` 必须至少包含 `系统：`、`任务：`、`当前阶段：`、`状态：`、`整体进度：`、`最后更新：` 和 `## 状态日志`。阶段值建议使用 `design-1`、`design-2`、`implement`、`test`、`debug`、`script`、`done`；状态日志按时间追加，记录阶段变化、关键产物、阻塞项和下一步。
+- **AI 登记库**：仓库级 `docs/ai-register.db`（SQLite）记录每个会话的工具、sessionId、模型、resume 指令、所属任务目录、完成功能与完成进度。登记核心脚本为本 skill 的 `scripts/ai_register_core.py`；SessionStart hook（`scripts/hooks/*.ps1`）只注入身份上下文，实际写库由 AI 调用核心完成。该库由核心首次运行自动建表，无需手工创建。
 
 ## 阶段命令
 
@@ -34,19 +38,22 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
 1. 简单任务可直接进入上下文收集；复杂任务必须先确认任务目录。
 2. 在 `docs/[需求目录]/onlyAI/structured-request.json` 记录结构化需求，**必须包含本次任务所属的系统名称**。
 3. 首次创建 `status.md` 时，**必须在文件头部记录本次任务所属的系统名称**（如：`系统：用户中心`），后续所有记忆回写将使用该系统名作为知识库路径。
-4. 输出 `docs/[需求目录]/onlyAI/context-scan.json`，完成结构化快速扫描。
-5. 使用 `sequential-thinking` 梳理问题、约束和候选方案，并使用 `brainstorming` 做多方案发散。
-6. 针对高优疑问补充 `docs/[需求目录]/onlyAI/context-question-N.json`，完成充分性检查后再进入设计。
-7. 基于 `assets/概要设计模板.md` 输出 `001-概要设计.md`。
-8. **待确认机制**：如果在设计过程中发现以下情况，生成 `001-概要设计-待确认.md`：
+4. 创建或更新 `status.md`：`当前阶段：design-1`，`状态：进行中`，`整体进度：10%`，并在状态日志记录阶段启动。
+5. 输出 `docs/[需求目录]/onlyAI/context-scan.json`，完成结构化快速扫描，并在 `status.md` 记录上下文扫描完成。
+6. 使用 `sequential-thinking` 梳理问题、约束和候选方案，并使用 `brainstorming` 做多方案发散。
+7. 针对高优疑问补充 `docs/[需求目录]/onlyAI/context-question-N.json`，完成充分性检查后再进入设计。
+8. 基于 `assets/概要设计模板.md` 输出 `001-概要设计.md`，并在 `status.md` 记录概要设计产物。
+9. **待确认机制**：如果在设计过程中发现以下情况，生成 `001-概要设计-待确认.md`：
    - 存在多个技术方案，需要用户决策
    - 业务逻辑不明确，需要用户澄清
    - 存在架构风险或性能风险，需要用户确认可接受程度
    - 涉及外部系统集成，接口规范待确认
-9. **待确认项处理**（在当前阶段完成）：
+10. 生成待确认文档时，必须将 `status.md` 更新为 `状态：待确认`，在状态日志写明待确认文件路径、阻塞问题和下一步。
+11. **待确认项处理**（在当前阶段完成）：
    - **分阶段模式**：生成待确认文档后，暂停并提示用户处理。用户填写决策后，AI 根据决策更新 `001-概要设计.md`，重新收敛设计逻辑，将待确认文档状态标记为"已处理"。**只有待确认文档状态为"已处理"后，才能进入下一阶段**。
    - **Solo 模式**：生成待确认文档后，AI 立即自动评估各方案（性能、可维护性、实现成本、风险、扩展性），选择最优方案，在 `001-概要设计.md` 中补充"AI 自动决策"章节说明理由，重新收敛设计逻辑，将待确认文档状态标记为"已处理"，然后继续。
-10. **阶段完成校验**：确认 `001-概要设计-待确认.md` 不存在或状态为"已处理"后，提示进入 `sdlc-design-2`。
+12. 待确认项处理完成后，必须将 `status.md` 恢复为 `状态：进行中`，记录决策结论和已更新产物。
+13. **阶段完成校验**：确认 `001-概要设计-待确认.md` 不存在或状态为"已处理"后，将 `status.md` 更新为 `当前阶段：design-1`、`整体进度：25%`，记录阶段完成并提示进入 `sdlc-design-2`。
 
 ### `sdlc-design-2`
 
@@ -57,18 +64,21 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
 2. 先判断需求属于短期任务（≤3天）还是中长期任务（>3天）。
 3. 中长期任务必须先做模块化规划，拆分顶层模块、里程碑和当前模块任务。
 4. 基于 `001-概要设计.md` 继续收集实现细节，并完成接口契约、风险与验证标准定义。
-5. 使用 `assets/详细设计模板.md` 输出 `002-详细设计.md`。
-6. 使用 `assets/施工文档模板.md` 输出 `003-施工文档.md`。
-7. 在施工文档中明确改动文件清单、新增文件清单、作用域边界和中文注释要求。
-8. **待确认机制**：如果在详细设计过程中发现以下情况，生成 `002-详细设计-待确认.md`：
+5. 阶段启动时必须更新 `status.md`：`当前阶段：design-2`，`状态：进行中`，`整体进度：30%`，并记录阶段启动。
+6. 使用 `assets/详细设计模板.md` 输出 `002-详细设计.md`，并在 `status.md` 记录详细设计产物。
+7. 使用 `assets/施工文档模板.md` 输出 `003-施工文档.md`，并在 `status.md` 记录施工计划产物。
+8. 在施工文档中明确改动文件清单、新增文件清单、作用域边界和中文注释要求。
+9. **待确认机制**：如果在详细设计过程中发现以下情况，生成 `002-详细设计-待确认.md`：
    - 数据库表结构设计存在多种方案
    - 接口参数定义需要前后端协商
    - 性能优化策略需要权衡
    - 异常处理策略需要明确
-9. **待确认项处理**（在当前阶段完成）：
+10. 生成待确认文档时，必须将 `status.md` 更新为 `状态：待确认`，在状态日志写明待确认文件路径、阻塞问题和下一步。
+11. **待确认项处理**（在当前阶段完成）：
    - **分阶段模式**：生成待确认文档后，暂停并提示用户处理。用户填写决策后，AI 根据决策更新 `002-详细设计.md` 和 `003-施工文档.md`，重新收敛设计逻辑，将待确认文档状态标记为"已处理"。**只有待确认文档状态为"已处理"后，才能进入下一阶段**。
    - **Solo 模式**：生成待确认文档后，AI 立即自动评估各方案，选择最优方案，在 `002-详细设计.md` 中补充"AI 自动决策"章节说明理由，重新收敛设计逻辑，将待确认文档状态标记为"已处理"，然后继续。
-10. **阶段完成校验**：确认 `002-详细设计-待确认.md` 不存在或状态为"已处理"后，提示进入 `sdlc-implement`。
+12. 待确认项处理完成后，必须将 `status.md` 恢复为 `状态：进行中`，记录决策结论和已更新产物。
+13. **阶段完成校验**：确认 `002-详细设计-待确认.md` 不存在或状态为"已处理"后，将 `status.md` 更新为 `当前阶段：design-2`、`整体进度：45%`，记录阶段完成并提示进入 `sdlc-implement`。
 
 ### `sdlc-implement`
 
@@ -76,47 +86,52 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
 
 1. **前置校验**：检查是否存在 `002-详细设计-待确认.md`。
    - 如果存在且状态为"待处理"，**拒绝进入本阶段**，提示用户必须先完成 design-2 阶段的待确认项处理。
-2. **读取施工文档**：读取 `003-施工文档.md` 中的任务拆解清单，确认每个任务的实施步骤和文件清单。
-3. **任务级实施**：严格按照施工文档中的任务顺序，逐个任务执行：
+2. 阶段启动时必须更新 `status.md`：`当前阶段：implement`，`状态：进行中`，`整体进度：50%`，并记录阶段启动。
+3. **读取施工文档**：读取 `003-施工文档.md` 中的任务拆解清单，确认每个任务的实施步骤和文件清单。
+4. **任务级实施**：严格按照施工文档中的任务顺序，逐个任务执行：
    - 每次只执行一个任务
    - 严格按照该任务的文件清单编码，禁止越界施工
    - 所有新增、修改代码必须同步补齐中文注释
-   - 任务完成后，立即执行步骤 4-6
-4. **记录文件改动**：每完成一个任务后，在 `003-文件改动记录.md` 中记录本次改动：
+   - 任务完成后，立即执行步骤 5-8
+5. **记录文件改动**：每完成一个任务后，在 `003-文件改动记录.md` 中记录本次改动：
    - 使用 `assets/文件改动记录模板.md` 格式
    - 必须写明改动文件的具体行号范围（如：`src/hello.txt line 50~250`）
    - 记录改动类型（新增/修改/删除）、改动原因、关联任务
-5. **更新施工文档进度**：在 `003-施工文档.md` 中更新当前任务的状态：
+6. **更新施工文档进度**：在 `003-施工文档.md` 中更新当前任务的状态：
    - 标记任务为"已完成"
    - 填写完成时间
    - 记录实际改动的文件和行号
    - 如有偏差，说明偏差原因
-6. **更新执行日志**：在 `docs/[需求目录]/onlyAI/operations-log.md` 中追加本轮实施记录。
-7. **同步更新 status.md**：更新整体进度百分比和当前状态。
-8. **循环执行**：返回步骤 3，继续下一个任务，直到所有任务完成。
-9. **数据库脚本管理**：所有数据库相关脚本和语句统一落到 `docs/[需求目录]/sql/`。
-10. **阶段总结**：所有任务完成后，可自主生成 `docs/[需求目录]/summary.md` 汇总当前阶段结果。
-11. 完成后提示进入 `sdlc-test`。
+7. **更新执行日志**：在 `docs/[需求目录]/onlyAI/operations-log.md` 中追加本轮实施记录。
+8. **同步更新 status.md**：每完成一个任务都必须更新整体进度百分比、当前状态、已完成任务 ID、下一任务 ID；如有阻塞或偏差，写入阻塞项和下一步。
+9. **循环执行**：返回步骤 4，继续下一个任务，直到所有任务完成。
+10. **数据库脚本管理**：所有数据库相关脚本和语句统一落到 `docs/[需求目录]/sql/`。
+11. **阶段总结**：所有任务完成后，可自主生成 `docs/[需求目录]/summary.md` 汇总当前阶段结果。
+12. 阶段完成后将 `status.md` 更新为 `当前阶段：implement`、`整体进度：75%`，记录实现完成和待测试事项，然后提示进入 `sdlc-test`。
 
 ### `sdlc-test`
 
 阶段 4：质量验证与测试。
 
-1. 使用 `assets/测试用例模板.md` 输出 `004-测试用例.md`。
-2. 在 `docs/[需求目录]/onlyAI/testing.md` 与 `docs/[需求目录]/onlyAI/verification.md` 记录测试执行过程、输出和风险评估。
-3. 执行测试后，使用 `assets/测试报告模板.md` 输出 `005-测试报告.md`。
-4. 在 `docs/[需求目录]/onlyAI/review-report.md` 写入自我审查结论。
-5. 覆盖正常路径、边界情况、非法输入和权限场景。
-6. 完成后执行记忆回写；如有必要，生成 `docs/[需求目录]/summary.md` 汇总结果。
+1. 阶段启动时必须更新 `status.md`：`当前阶段：test`，`状态：进行中`，`整体进度：80%`，并记录阶段启动。
+2. 使用 `assets/测试用例模板.md` 输出 `004-测试用例.md`，并在 `status.md` 记录测试用例产物。
+3. 在 `docs/[需求目录]/onlyAI/testing.md` 与 `docs/[需求目录]/onlyAI/verification.md` 记录测试执行过程、输出和风险评估；每次测试命令执行后必须同步追加 `status.md` 状态日志，写明通过、失败或无法执行原因。
+4. 执行测试后，使用 `assets/测试报告模板.md` 输出 `005-测试报告.md`。
+5. 在 `docs/[需求目录]/onlyAI/review-report.md` 写入自我审查结论。
+6. 覆盖正常路径、边界情况、非法输入和权限场景。
+7. 完成后执行记忆回写；如有必要，生成 `docs/[需求目录]/summary.md` 汇总结果。
+8. 全部验证通过并完成记忆回写后，将 `status.md` 更新为 `当前阶段：done`、`状态：已完成`、`整体进度：100%`，记录交付清单、测试结论和知识库路径。
 
 ### `sdlc-debug`
 
 排查与修复阶段。
 
 1. 在复杂 Bug 或回归问题出现时触发。
-2. 使用 `assets/Debug排查记录模板.md` 输出 `006-Debug排查记录.md`。
-3. 在 `docs/[需求目录]/onlyAI/operations-log.md` 记录定位过程，在 `docs/[需求目录]/onlyAI/verification.md` 记录回归验证结果。
-4. 修复完成后同步更新记忆，并在需要时补充 `docs/[需求目录]/summary.md`。
+2. 阶段启动时必须更新 `status.md`：`当前阶段：debug`，`状态：排查中`，并记录触发原因、现象和初步范围。
+3. 使用 `assets/Debug排查记录模板.md` 输出 `006-Debug排查记录.md`。
+4. 在 `docs/[需求目录]/onlyAI/operations-log.md` 记录定位过程，在 `docs/[需求目录]/onlyAI/verification.md` 记录回归验证结果；每轮定位、修复、验证后必须同步追加 `status.md` 状态日志。
+5. 修复完成后同步更新记忆，并在需要时补充 `docs/[需求目录]/summary.md`。
+6. Debug 收尾时必须根据结果将 `status.md` 更新为 `状态：已修复`、`状态：待验证` 或 `状态：阻塞`，并写明下一步。
 
 ### `sdlc-solo`
 
@@ -133,6 +148,7 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
    - 存在 `002-详细设计.md` 和 `003-施工文档.md` → design-2 已完成
    - 存在代码变更且 `operations-log.md` 有记录 → implement 已完成
    - 存在 `005-测试报告.md` → test 已完成
+   - 阶段检测完成后必须立即更新 `status.md`，记录检测结果、推断出的起始阶段和计划执行到的目标阶段。
 
 2. **工作量评估与警告**：
    - 根据需求复杂度、涉及文件数量、架构变更范围评估剩余工作量
@@ -151,6 +167,7 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
    - 从下一个未完成阶段开始，依次自动执行：
      - `sdlc-design-1` → `sdlc-design-2` → `sdlc-implement` → `sdlc-test`
    - 每个阶段完成后自动进入下一阶段，无需用户干预
+   - 每个阶段开始、完成和自动跳转前都必须同步更新 `status.md`，并在状态日志标记为 solo 自动推进。
    - **待确认文档处理**：在 solo 模式下，遇到待确认文档时，AI 在当前阶段内自动处理：
      - 评估各候选方案的优劣（性能、可维护性、实现成本、风险、扩展性）
      - 选择综合评分最高的方案
@@ -163,6 +180,7 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
 4. **完成与交付**：
    - 所有阶段完成后，自动生成 `docs/[需求目录]/summary.md` 汇总交付物
    - 执行记忆回写（`update_memory` 或 `create_memory`）
+   - 将 `status.md` 更新为 `当前阶段：done`、`状态：已完成`、`整体进度：100%`
    - 向用户报告完整的交付清单和关键结论
 
 **核心约束**：
@@ -183,6 +201,96 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
 /software-dev-process sdlc-solo
 ```
 
+### `sdlc-script`
+
+一次性脚本任务：适用于 Shell、PHP、Python、SQL、Node.js 等一次性执行脚本的轻量级流程。
+
+**适用场景**：
+- 数据修复/迁移脚本（如：批量更新字段、数据清洗）
+- 一次性运维操作（如：清理过期数据、批量发通知）
+- 数据库 DDL/DML 变更脚本
+- 临时统计/导出脚本
+- 环境初始化或配置脚本
+
+**与标准 SDLC 流程的区别**：
+- 跳过概要设计和详细设计阶段（脚本任务不需要架构设计）
+- 聚焦于：安全性评估 → 脚本编写 → 验证方案 → 回滚预案
+- 产出物为单一脚本任务文档，而非多阶段设计文档
+
+**执行流程**：
+
+1. **需求确认**：
+   - 确认脚本类型（Shell / PHP / Python / SQL / Node.js / 其他）
+   - 确认执行环境（生产 / 预发 / 测试 / 本地）
+   - 确认任务目录，若无则创建 `docs/[需求目录]/`
+   - 创建或更新 `status.md`：`当前阶段：script`，`状态：进行中`，记录脚本任务类型、目标环境和风险初判。
+
+2. **风险评估**：
+   - 评估影响范围（涉及哪些表/服务/用户，预估数据量）
+   - 确定风险等级：
+     - **高危**：生产环境写操作、涉及核心业务数据、不可逆操作
+     - **中等**：预发环境操作、涉及非核心数据、可部分回滚
+     - **低风险**：测试环境、只读操作、完全可逆
+   - 高危脚本必须具备：Dry-run 模式、分批执行、回滚方案、数据备份
+
+3. **脚本设计与编写**：
+   - 使用 `assets/脚本任务模板.md` 输出 `docs/[需求目录]/script-[序号]-[简述].md`
+   - 脚本正文写入文档的"脚本正文"章节
+   - 如为 SQL 脚本，同时输出到 `docs/[需求目录]/sql/` 目录
+   - 必须包含：前置条件检查、核心逻辑、安全措施（Dry-run/分批/中断恢复）、验证 SQL/命令
+
+4. **回滚方案**：
+   - 高危和中等风险脚本必须提供回滚方案
+   - 回滚脚本（如有）单独输出到 `docs/[需求目录]/sql/` 或脚本文档内
+   - 明确回滚条件和回滚步骤
+
+5. **执行计划**：
+   - 列出分步执行计划（备份 → Dry-run → 正式执行 → 验证）
+   - 提供执行前检查 SQL 和执行后验证 SQL/命令
+   - 高危脚本必须标注"需人工确认后执行"
+
+6. **记忆回写**：
+   - 任务完成后执行记忆回写，记录脚本执行结论
+   - 使用 `status.md` 中记录的系统名称作为知识库路径
+   - 完成后将 `status.md` 更新为脚本最终状态；如脚本未执行，仅完成设计，则标记为 `状态：待执行` 并写明人工确认条件。
+
+**核心约束**：
+- 高危脚本禁止省略回滚方案和 Dry-run 设计
+- 生产环境脚本必须先在测试/预发环境验证通过
+- 所有脚本必须包含中文注释说明核心逻辑
+- 批量操作必须设计分批策略，禁止一次性全量执行大数据量操作
+- 脚本文档中必须明确"是否可重复执行（幂等性）"
+
+**文件命名规则**：
+- 脚本任务文档：`script-[序号]-[简述].md`（如：`script-001-清理过期订单.md`）
+- SQL 脚本文件：`{库名}_{操作描述}_{日期}.sql`（如：`order_db_clean_expired_20260515.sql`）
+
+### `sdlc-history`
+
+历史会话查询：用于快速查看 AI 登记库中的 SDLC 历史会话，不进入设计 / 施工 / 测试阶段，不生成 SDLC 文档。
+
+**触发场景**：
+- 用户明确输入 `sdlc-history`
+- 用户询问"某需求历史会话 / 这个需求谁做过 / 怎么续接某需求 / 看某任务登记"
+- 用户给出需求目录名、任务名或关键词，希望快速查历史会话
+
+**执行规则**：
+1. 直接查询仓库级 `docs/ai-register.db`，不得创建设计、施工或测试文档。
+2. 使用本 Skill 自带脚本 `skills/software-dev-process/scripts/ai_register_core.py`。
+3. 无关键词时查询全部历史：
+   ```bash
+   python skills/software-dev-process/scripts/ai_register_core.py query
+   ```
+4. 用户给出明确任务目录时优先精确查询：
+   ```bash
+   python skills/software-dev-process/scripts/ai_register_core.py query --task-dir "docs/[需求目录]/"
+   ```
+5. 用户给出的是需求名称、片段或自然语言关键词时，使用关键词模糊查询：
+   ```bash
+   python skills/software-dev-process/scripts/ai_register_core.py query --keyword "[关键词]"
+   ```
+6. 输出查询表格后，用 1-3 句话说明可续接的 `resume(shell)`、任务目录和最近进度；若结果为空，说明登记库为空或未匹配到该需求。
+
 ## 可用资源
 
 - `software-dev-process/assets/概要设计模板.md`
@@ -194,6 +302,9 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
 - `software-dev-process/assets/文件改动记录模板.md`
 - `software-dev-process/assets/Debug排查记录模板.md`
 - `software-dev-process/assets/待确认模板.md`
+- `software-dev-process/assets/脚本任务模板.md`
+- `software-dev-process/scripts/ai_register_core.py`
+- `software-dev-process/scripts/install_codex_hook.ps1`
 
 ## 待确认文档机制
 
@@ -247,3 +358,58 @@ description: 管理完整的软件开发生命周期（需求理解、概要设�
 7. 将每个待确认项的"决策状态"更新为"已决策"，在"用户决策"部分填写 AI 选择的方案和理由
 8. **待确认文档保留作为决策记录，不删除**
 9. 继续当前阶段的后续步骤，完成后自动进入下一阶段
+
+## AI 登记机制
+
+为支持任务跨会话、跨工具（Claude Code ↔ Codex）准确接力，SDLC 过程中维护一个仓库级 SQLite 登记库 `docs/ai-register.db`，以 `session_id` 为唯一主键。登记核心脚本是本 skill 的 `scripts/ai_register_core.py`（纯 Python 标准库，负责建库 / upsert / 进度 / 查询）。
+
+> 下文命令中的 `<skill>` 指本 software-dev-process skill 的根目录；AI 执行时按 skill 实际安装路径解析（如 `~/.codex/skills/software-dev-process/` 或 `~/.claude/skills/software-dev-process/`）。
+
+### 职责分工
+
+- **SessionStart hook（只注入，不写库）**：会话启动时由工具触发，把本会话的 sessionId、工具、模型注入会话上下文，提醒维护登记库。
+  - Claude Code：`scripts/hooks/cc_session_start.ps1`（从 stdin JSON 取 `session_id`）。
+  - Codex：`scripts/hooks/codex_session_start.ps1`（从环境变量取 session id）。
+  - 通过 `scripts/install_codex_hook.ps1` 等安装脚本注册到工具的 hook 配置（`scripts/hooks/` 即"待安装 hook"目录）。
+- **skill / AI（实际写库）**：AI 从注入的上下文得知自己的 sessionId、工具、模型，调用 `scripts/ai_register_core.py` 完成全部写入——会话开始 upsert 身份，推进任务回填进度。**只写自己 sessionId 这一行**，与并行会话互不干扰。
+
+### 登记身份（会话开始，AI 执行一次）
+
+拿到注入的 sessionId / 工具 / 模型后立即 upsert：
+
+```bash
+python3 <skill>/scripts/ai_register_core.py upsert \
+  --session <自己的 sessionId> \
+  --tool "Claude Code" \
+  --model <注入的模型名>
+```
+`--tool` 按当前工具填 `Claude Code` 或 `Codex`；resume 指令（shell/cli）由核心按工具自动拼装。
+
+### 回填进度（推进任务时，AI 执行）
+
+在阶段切换、施工任务完成、测试执行等节点，以自己的 sessionId 为键回填：
+
+```bash
+python3 <skill>/scripts/ai_register_core.py progress \
+  --session <自己的 sessionId> \
+  --task-dir "docs/[需求目录]/" \
+  --feature "本次完成的功能" \
+  --progress "75%"
+```
+- 只更新显式给出的字段，未给的列保持不变；身份列由 `upsert` 维护，不在此覆盖。
+- 命令默认把库定位到 `<cwd>/docs/ai-register.db`，可用 `--db` 显式指定。
+
+### 查询登记（用户触发时）
+
+当用户表达 `sdlc-history`、"看登记 / 谁推进到哪 / 怎么续接 / 某需求历史会话"等意图时，运行只读查询并贴出可读表格：
+
+```bash
+python3 <skill>/scripts/ai_register_core.py query                              # 全部会话概览
+python3 <skill>/scripts/ai_register_core.py query --task-dir "docs/[需求目录]/" # 指定任务（含续接指令）
+python3 <skill>/scripts/ai_register_core.py query --keyword "[关键词]"          # 按需求关键词模糊查询
+```
+
+### 并发与容错
+
+- 并行多会话：每个会话只认 / 只写自己被注入的 sessionId，`PRIMARY KEY` + `ON CONFLICT DO UPDATE` + WAL 保证不重复、不撞写。
+- hook 注入失败不中断主流程；若 AI 未拿到注入的 sessionId（异常情况），可退化为按 Claude Code transcript 目录"最新 mtime 的 .jsonl"文件名推断，并在登记中标注为推测值。
