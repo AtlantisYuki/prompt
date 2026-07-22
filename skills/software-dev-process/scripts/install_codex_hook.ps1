@@ -21,7 +21,8 @@ function New-HookEntry {
         [string]$HookScript
     )
 
-    $command = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + $HookScript + '"'
+    $escapedHookScript = $HookScript.Replace("'", "''")
+    $command = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::In.ReadToEnd() | & ''{0}''"' -f $escapedHookScript
 
     [ordered]@{
         matcher = "startup|resume|clear|compact"
@@ -172,14 +173,13 @@ foreach ($entry in $existingEntries) {
     }
 }
 
-if ($hasEntry -and -not $Force -and -not $hasLegacySdlcEntry) {
-    Write-Host "SDLC Codex SessionStart hook is already installed."
-    Write-Host "hooks.json: $hooksJsonPath"
-    Write-Host "hook script: $installedHookScript"
-    exit 0
-}
+$configChanged = $true
 
-if ($hasEntry -or $hasLegacySdlcEntry -or $Force) {
+if ($hasEntry -and -not $Force -and -not $hasLegacySdlcEntry) {
+    # Keep the valid config entry, but refresh the installed script after skill upgrades.
+    $configChanged = $false
+}
+else {
     $keptEntries = @()
     foreach ($entry in $existingEntries) {
         if (-not (Test-EntryIsSdlcHook -Entry $entry)) {
@@ -187,33 +187,43 @@ if ($hasEntry -or $hasLegacySdlcEntry -or $Force) {
         }
     }
     $config.hooks.SessionStart = $keptEntries
-}
 
-$newEntry = New-HookEntry -HookScript $installedHookScript
-$config.hooks.SessionStart = @($config.hooks.SessionStart) + @($newEntry)
+    $newEntry = New-HookEntry -HookScript $installedHookScript
+    $config.hooks.SessionStart = @($config.hooks.SessionStart) + @($newEntry)
+}
 
 $json = $config | ConvertTo-Json -Depth 20
 
 if ($DryRun) {
-    Write-Host "[dry-run] Would update: $hooksJsonPath"
-    Write-Host "[dry-run] Would copy hook script: $sourceHookScript -> $installedHookScript"
-    Write-Host "[dry-run] Would add SessionStart hook script: $installedHookScript"
-    Write-Host $json
+    Write-Host "[dry-run] Would refresh hook script: $sourceHookScript -> $installedHookScript"
+    if ($configChanged) {
+        Write-Host "[dry-run] Would update: $hooksJsonPath"
+        Write-Host $json
+    }
+    else {
+        Write-Host "[dry-run] hooks.json already contains the expected SessionStart entry."
+    }
     exit 0
 }
 
 Copy-Item -LiteralPath $sourceHookScript -Destination $installedHookScript -Force
 
-if (Test-Path -LiteralPath $hooksJsonPath) {
-    $timestamp = Get-Date -Format "yyyyMMddHHmmss"
-    $backupPath = "$hooksJsonPath.bak.$timestamp"
-    Copy-Item -LiteralPath $hooksJsonPath -Destination $backupPath
-    Write-Host "Backup written: $backupPath"
+if ($configChanged) {
+    if (Test-Path -LiteralPath $hooksJsonPath) {
+        $timestamp = Get-Date -Format "yyyyMMddHHmmss"
+        $backupPath = "$hooksJsonPath.bak.$timestamp"
+        Copy-Item -LiteralPath $hooksJsonPath -Destination $backupPath
+        Write-Host "Backup written: $backupPath"
+    }
+
+    [System.IO.File]::WriteAllText($hooksJsonPath, $json, [System.Text.UTF8Encoding]::new($false))
 }
 
-[System.IO.File]::WriteAllText($hooksJsonPath, $json, [System.Text.UTF8Encoding]::new($false))
 Write-Host "SDLC Codex SessionStart hook installed."
 Write-Host "hooks.json: $hooksJsonPath"
 Write-Host "source hook script: $sourceHookScript"
 Write-Host "installed hook script: $installedHookScript"
+if (-not $configChanged) {
+    Write-Host "Existing hooks.json entry preserved; installed hook script was refreshed."
+}
 Write-Host "Restart Codex or start a new session to load the hook."

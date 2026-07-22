@@ -1,7 +1,7 @@
 interface:
-  display_name: "software-dev-process"
-  short_description: "指令: sdlc-design-1 sdlc-design-2 sdlc-implement sdlc-test sdlc-debug sdlc-script sdlc-history"
-  default_prompt: "Use $software-dev-process to continue the workflow with sdlc-design-1, sdlc-design-2, sdlc-implement, sdlc-test, sdlc-debug, sdlc-script, or sdlc-history."
+  display_name: "Software Development Process"
+  short_description: "文档先行、确定性状态、Grill 评审与关闭门禁的 SDLC"
+  default_prompt: "Use $software-dev-process to advance or close this task with deterministic task state, document review, verification, AI registration, and knowledge gates."
 
 policy:
   allow_implicit_invocation: true

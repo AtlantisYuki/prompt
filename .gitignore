@@ -1,3 +1,8 @@
 docs/
 __pycache__
-test_*
+/test_*
+docs/ai-register.json
+.claude/
+.codex/
+test/
+ai_test/
