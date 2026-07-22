@@ -4,7 +4,7 @@
   "port": 5432,
   "database": "ai_register",
   "user": "ai_register",
-  "password_env": "AI_REGISTER_DB_PASSWORD",
+  "password": "change-me",
   "connect_timeout": 3,
   "sslmode": "prefer"
 }

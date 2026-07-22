@@ -73,7 +73,7 @@ python <skill>/scripts/task_state_core.py close-artifact --task-dir "docs/[需�
 
 ## 后端、幂等与边界
 
-- 登记脚本优先读取 `docs/ai-register.json` 中的 PostgreSQL/MySQL 配置；不可用时降级到项目 `docs/ai-register.db`。配置只保存连接参数和 `password_env`，不保存明文密码。
+- 登记脚本优先读取 `docs/ai-register.json` 中的 PostgreSQL/MySQL 配置（含 JSON 内 `password`）；不可用时降级到项目 `docs/ai-register.db`。
 - 重复 Close 必须幂等：已完成任务按内容去重，session 按主键更新，知识条目不重复创建，已记录的收口结果不重复追加。
 - Close 不自动提交、推送、合并、部署、执行生产脚本或删除任务目录；这些动作需要各自授权。
 

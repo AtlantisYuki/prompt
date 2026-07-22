@@ -4,10 +4,10 @@
 
 ## 提示词目录
 
-- `repository/AGENTS.md`：项目级（软件开发）模板，复制为具体项目根目录的 `AGENTS.md`。含任务路由细化、工具能力与 MCP 降级、项目知识库、编码验证与 SDLC 接入。
+- `repository/AGENTS.md`：项目级（软件开发）模板，复制为具体项目的 `.agents/AGENTS.md`。含任务路由细化、工具能力与 MCP 降级、项目知识库、编码验证与 SDLC 接入。
 - `user/AGENTS.md`：用户级（通用）提示词，可复制到各 AI Agent 的用户级指令位置（如 Codex 用户目录、Claude Code 全局 CLAUDE.md）。含交互、安全底线、粗路由与登记指针；不写软开工具表。
 
-业务项目中的 `AGENTS.md` 从仓库根到当前工作目录逐层累积生效，仅在规则冲突时由更近层级覆盖。本仓库本身不维护根目录 `AGENTS.md`，分发模板只放在 `user/` 与 `repository/`。
+业务项目中的 `.agents/AGENTS.md` 从仓库根到当前工作目录逐层累积生效，仅在规则冲突时由更近层级覆盖。本仓库本身不维护业务形态的 `.agents/AGENTS.md`，分发模板只放在 `user/` 与 `repository/`。
 
 ## 核心流程
 
@@ -65,7 +65,7 @@ skills/software-dev-process/
 
 ## AI 登记后端
 
-登记脚本优先读取项目 `docs/ai-register.json`，使用 PostgreSQL 或 MySQL；配置、驱动或连接不可用时降级到项目 `docs/ai-register.db`。配置模板位于 `skills/software-dev-process/assets/ai-register.config.example.json`，密码只通过 `password_env` 引用，不写入配置文件。
+登记脚本优先读取项目 `docs/ai-register.json`，使用 PostgreSQL 或 MySQL；配置、驱动或连接不可用时降级到项目 `docs/ai-register.db`。配置模板位于 `skills/software-dev-process/assets/ai-register.config.example.json`，密码直接写在 JSON 的 `password` 字段中。
 
 所有后端统一记录 session、任务目录、工具、模型、Git 分支、已完成任务和进度。`sdlc-close` 负责最终同步为 `100%`。
 

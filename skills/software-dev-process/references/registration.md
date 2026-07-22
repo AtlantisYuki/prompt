@@ -31,10 +31,10 @@
 
 1. 如果显式传入 `--db`，只使用指定 SQLite。
 2. 否则读取 Git 根目录 `docs/ai-register.json`，按 `backend` 使用 `postgresql` 或 `mysql`。
-3. 配置文件不存在、格式无效、密码环境变量缺失、驱动未安装、连接失败或远程操作失败时，输出降级原因并使用 Git 根目录 `docs/ai-register.db`。
+3. 配置文件不存在、格式无效、驱动未安装、连接失败或远程操作失败时，输出降级原因并使用 Git 根目录 `docs/ai-register.db`。
 4. 每次命令把实际后端输出为 `backend=postgresql`、`backend=mysql` 或 `backend=sqlite`，将该结果写入 `status.md` 或操作记录。
 
-从 `assets/ai-register.config.example.json` 复制配置到项目 `docs/ai-register.json`。配置不得包含明文 `password`，只写密码环境变量名：
+从 `assets/ai-register.config.example.json` 复制配置到项目 `docs/ai-register.json`。密码字段直接写在 JSON 的 `password` 中，由登记脚本读取：
 
 ```json
 {
@@ -43,7 +43,7 @@
   "port": 5432,
   "database": "ai_register",
   "user": "ai_register",
-  "password_env": "AI_REGISTER_DB_PASSWORD",
+  "password": "change-me",
   "connect_timeout": 3,
   "sslmode": "prefer"
 }
@@ -51,7 +51,7 @@
 
 使用 MySQL 时把 `backend` 改为 `mysql`、端口改为 `3306`，移除 `sslmode`。PostgreSQL 驱动支持 `psycopg` / `psycopg2`，MySQL 驱动支持 `pymysql` / `mysql-connector-python`；驱动不是 Skill 的强制依赖，缺失时自动使用 SQLite。
 
-实际 `docs/ai-register.json` 应加入项目忽略规则，不提交连接信息。远程后端短暂不可用时可能产生 SQLite 降级记录；查询命令会明确当前读取的后端，不把两个来源伪装为已自动合并。
+实际 `docs/ai-register.json` 含连接密码，应加入项目忽略规则，不提交到版本库。远程后端短暂不可用时可能产生 SQLite 降级记录；查询命令会明确当前读取的后端，不把两个来源伪装为已自动合并。
 
 ## 身份规则
 

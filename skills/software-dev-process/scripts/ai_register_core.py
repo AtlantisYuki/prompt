@@ -363,19 +363,18 @@ class RemoteRegistry:
         }
         if backend not in aliases:
             raise ValueError("backend 必须是 postgresql 或 mysql")
-        if "password" in config:
-            raise ValueError("配置文件不得保存明文 password；请使用 password_env")
         self.name = aliases[backend]
         self.config = config
 
     def _password(self) -> str | None:
-        env_name = str(self.config.get("password_env", "")).strip()
-        if not env_name:
+        """从配置 JSON 直接读取 password；缺省或空字符串视为无密码。"""
+        if "password" not in self.config:
             return None
-        value = os.environ.get(env_name)
+        value = self.config.get("password")
         if value is None:
-            raise RuntimeError(f"密码环境变量未设置：{env_name}")
-        return value
+            return None
+        text = str(value)
+        return text if text else None
 
     def _connect(self) -> Any:
         host = self.config.get("host", "127.0.0.1")
@@ -660,7 +659,7 @@ class RemoteRegistry:
 
 
 def load_remote_config(config_path: str) -> dict[str, Any]:
-    """读取不含明文密码的远程登记配置。"""
+    """读取远程登记配置（含 JSON 内 password 字段）。"""
     with open(config_path, "r", encoding="utf-8") as handle:
         config = json.load(handle)
     if not isinstance(config, dict):
